@@ -32,7 +32,7 @@ function App() {
   const [category, setCategory] = useState('All')
   const [query, setQuery] = useState('')
   const [cart, setCart] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('essence-cart') || '[]') } catch { return [] }
+    try { return JSON.parse(window.localStorage?.getItem('essence-cart') || '[]') } catch { return [] }
   })
   const [cartOpen, setCartOpen] = useState(false)
   const [adminOpen, setAdminOpen] = useState(false)
@@ -42,7 +42,7 @@ function App() {
   const [loading, setLoading] = useState(isSupabaseConfigured)
 
   useEffect(() => {
-    localStorage.setItem('essence-cart', JSON.stringify(cart))
+    try { window.localStorage?.setItem('essence-cart', JSON.stringify(cart)) } catch { /* Storage may be unavailable in private or embedded browsers. */ }
   }, [cart])
 
   useEffect(() => {
