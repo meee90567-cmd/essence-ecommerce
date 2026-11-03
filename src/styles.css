@@ -10,3 +10,18 @@
 .checkout-form input:focus,.checkout-form textarea:focus{border-color:#81896e}
 .checkout-form .form-error{margin:0}
 .checkout-form .button{margin-top:3px}
+
+
+/* Store admin product inventory */
+.admin-inventory{border-top:1px solid var(--line);margin-top:25px;padding-top:20px}
+.admin-inventory-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.admin-inventory-heading h3{font:22px var(--serif);margin:0}
+.admin-inventory-heading span,.admin-empty{font-size:10px;color:#85877d}
+.admin-product-row{display:grid;grid-template-columns:48px minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+.admin-product-row>img{width:48px;height:54px;object-fit:cover;background:#e9e7df}
+.admin-product-details{display:flex;flex-direction:column;gap:5px;min-width:0}
+.admin-product-details strong{font:15px var(--serif);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.admin-product-details span{font-size:9px;color:#85877d}
+.admin-product-row>button{border:0;background:transparent;text-decoration:underline;font-size:9px;padding:7px 2px}
+.admin-product-row>button.admin-delete{color:#a04437}
+.admin-product-row>button:disabled{opacity:.45}
