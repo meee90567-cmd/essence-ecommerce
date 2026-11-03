@@ -130,3 +130,30 @@ alter table public.orders enable row level security;
 alter table public.order_items enable row level security;
 revoke all on public.orders from anon, authenticated;
 revoke all on public.order_items from anon, authenticated;
+
+
+-- ESSENCE checkout orders. Only trusted Edge Functions access these tables.
+create table if not exists public.orders (
+ id uuid primary key default gen_random_uuid(),
+ customer_name text not null, customer_email text not null,
+ customer_phone text not null, delivery_address text not null,
+ total_amount numeric(12,2) not null check (total_amount > 0),
+ currency text not null default 'NGN' check (currency = 'NGN'),
+ status text not null default 'pending' check (status in ('pending','paid','failed')),
+ paystack_reference text not null unique,
+ created_at timestamptz not null default now(), paid_at timestamptz
+);
+create table if not exists public.order_items (
+ id uuid primary key default gen_random_uuid(),
+ order_id uuid not null references public.orders(id) on delete cascade,
+ product_id uuid not null references public.products(id),
+ product_name text not null, quantity integer not null check (quantity between 1 and 20),
+ unit_price numeric(12,2) not null check (unit_price > 0),
+ line_total numeric(12,2) not null check (line_total > 0)
+);
+create index if not exists orders_created_at_idx on public.orders(created_at desc);
+create index if not exists order_items_order_id_idx on public.order_items(order_id);
+alter table public.orders enable row level security;
+alter table public.order_items enable row level security;
+revoke all on public.orders from anon, authenticated;
+revoke all on public.order_items from anon, authenticated;
