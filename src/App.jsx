@@ -40,6 +40,9 @@ function App() {
   const [session, setSession] = useState(null)
   const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(isSupabaseConfigured)
+  const [checkout, setCheckout] = useState({ name: '', email: '', phone: '', address: '' })
+  const [checkoutBusy, setCheckoutBusy] = useState(false)
+  const [checkoutError, setCheckoutError] = useState('')
 
   useEffect(() => {
     try { window.localStorage?.setItem('essence-cart', JSON.stringify(cart)) } catch { /* Storage may be unavailable in private or embedded browsers. */ }
@@ -59,6 +62,52 @@ function App() {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession))
     return () => { alive = false; listener.subscription.unsubscribe() }
   }, [])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const reference = params.get('reference') || params.get('trxref')
+    if (!reference || !isSupabaseConfigured) return
+    let active = true
+    async function verifyPayment() {
+      setNotice('Confirming your payment…')
+      const { data, error } = await supabase.functions.invoke('paystack-verify', { body: { reference } })
+      if (!active) return
+      if (!error && data?.success) {
+        setCart([])
+        setCartOpen(false)
+        setNotice('Payment confirmed. Thank you for shopping with ESSENCE.')
+      } else {
+        setNotice(data?.error || error?.message || 'We could not confirm this payment yet.')
+      }
+      params.delete('reference')
+      params.delete('trxref')
+      params.delete('status')
+      const query = params.toString()
+      window.history.replaceState({}, '', window.location.pathname + (query ? `?${query}` : '') + window.location.hash)
+    }
+    verifyPayment()
+    return () => { active = false }
+  }, [])
+
+  async function startCheckout(event) {
+    event.preventDefault()
+    setCheckoutBusy(true)
+    setCheckoutError('')
+    try {
+      const { data, error } = await supabase.functions.invoke('paystack-checkout', {
+        body: {
+          ...checkout,
+          items: cart.map(item => ({ id: item.id, quantity: item.quantity })),
+        },
+      })
+      if (error) throw new Error(data?.error || error.message || 'Unable to start checkout.')
+      if (!data?.authorization_url) throw new Error(data?.error || 'Paystack did not return a checkout link.')
+      window.location.assign(data.authorization_url)
+    } catch (error) {
+      setCheckoutError(error.message || 'Unable to start checkout. Please try again.')
+      setCheckoutBusy(false)
+    }
+  }
 
   const categories = ['All', ...new Set(products.map(p => p.category).filter(Boolean))]
   const visibleProducts = useMemo(() => products.filter(p => {
@@ -201,7 +250,7 @@ function App() {
 
       {cartOpen && <div className="overlay" onMouseDown={e => e.target === e.currentTarget && setCartOpen(false)}><aside className="cart-drawer">
         <div className="drawer-head"><div><p className="eyebrow">YOUR SELECTION</p><h2>Your bag <span>({cartCount})</span></h2></div><button className="icon-button" aria-label="Close bag" onClick={() => setCartOpen(false)}><Icon name="close"/></button></div>
-        {cart.length ? <><div className="cart-items">{cart.map(item => <div className="cart-item" key={item.id}><img src={item.image_url} alt={item.name}/><div className="cart-item-info"><h3>{item.name}</h3><p>{money(item.price)}</p><div className="quantity"><button onClick={() => changeQuantity(item.id, -1)} aria-label="Decrease quantity"><Icon name="minus"/></button><span>{item.quantity}</span><button onClick={() => changeQuantity(item.id, 1)} aria-label="Increase quantity"><Icon name="plus"/></button></div></div><strong>{money(item.price * item.quantity)}</strong></div>)}</div><div className="cart-bottom"><div className="subtotal"><span>Subtotal</span><strong>{money(subtotal)}</strong></div><p>Delivery and payment options will be confirmed at checkout.</p><button className="button button-dark full" disabled>Checkout coming soon</button><button className="continue-link" onClick={() => setCartOpen(false)}>Continue exploring</button></div></> : <div className="cart-empty"><span>✳</span><h3>Your bag is waiting.</h3><p>Find something that feels like you.</p><button className="button button-dark" onClick={() => setCartOpen(false)}>Explore the collection</button></div>}
+        {cart.length ? <><div className="cart-items">{cart.map(item => <div className="cart-item" key={item.id}><img src={item.image_url} alt={item.name}/><div className="cart-item-info"><h3>{item.name}</h3><p>{money(item.price)}</p><div className="quantity"><button onClick={() => changeQuantity(item.id, -1)} aria-label="Decrease quantity"><Icon name="minus"/></button><span>{item.quantity}</span><button onClick={() => changeQuantity(item.id, 1)} aria-label="Increase quantity"><Icon name="plus"/></button></div></div><strong>{money(item.price * item.quantity)}</strong></div>)}</div><div className="cart-bottom"><div className="subtotal"><span>Subtotal</span><strong>{money(subtotal)}</strong></div><p>Enter your delivery details to continue to secure payment by Paystack.</p><form className="checkout-form" onSubmit={startCheckout}><label>Full name<input required minLength="2" autoComplete="name" value={checkout.name} onChange={e => setCheckout({ ...checkout, name: e.target.value })} /></label><label>Email address<input required type="email" autoComplete="email" value={checkout.email} onChange={e => setCheckout({ ...checkout, email: e.target.value })} /></label><label>Phone number<input required type="tel" autoComplete="tel" value={checkout.phone} onChange={e => setCheckout({ ...checkout, phone: e.target.value })} /></label><label>Delivery address<textarea required minLength="8" rows="2" autoComplete="street-address" value={checkout.address} onChange={e => setCheckout({ ...checkout, address: e.target.value })} /></label>{checkoutError && <p className="form-error">{checkoutError}</p>}<button className="button button-dark full" disabled={checkoutBusy || !isSupabaseConfigured}>{checkoutBusy ? 'Connecting to Paystack…' : 'Continue to payment'}</button></form><button className="continue-link" onClick={() => setCartOpen(false)}>Continue exploring</button></div></> : <div className="cart-empty"><span>✳</span><h3>Your bag is waiting.</h3><p>Find something that feels like you.</p><button className="button button-dark" onClick={() => setCartOpen(false)}>Explore the collection</button></div>}
       </aside></div>}
 
       {adminOpen && <AdminPanel session={session} onClose={() => setAdminOpen(false)} onSignIn={signIn} onSave={saveProduct}/>}
