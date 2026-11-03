@@ -90,10 +90,20 @@ function App() {
     if (error) throw error
   }
 
-  async function saveProduct(form) {
+  async function saveProduct(form, imageFile) {
+    let imageUrl = form.image_url.trim()
+    if (imageFile) {
+      const extension = ({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' })[imageFile.type]
+      if (!extension || imageFile.size > 5 * 1024 * 1024) throw new Error('Choose a JPG, PNG or WebP image under 5 MB.')
+      const path = `${Date.now()}-${imageFile.name.replace(/[^a-zA-Z0-9._-]/g, '')}`
+      const { data: upload, error: uploadError } = await supabase.storage.from('product-images').upload(path, imageFile, { cacheControl: '3600', upsert: false, contentType: imageFile.type })
+      if (uploadError) throw uploadError
+      imageUrl = supabase.storage.from('product-images').getPublicUrl(upload.path).data.publicUrl
+    }
+    if (!imageUrl) throw new Error('Please choose a product image.')
     const { error } = await supabase.from('products').insert({
       name: form.name, category: form.category, price: Number(form.price),
-      description: form.description, image_url: form.image_url, is_active: true
+      description: form.description, image_url: imageUrl, is_active: true
     })
     if (error) throw error
     const { data } = await supabase.from('products').select('*').eq('is_active', true).order('created_at', { ascending: false })
@@ -204,6 +214,7 @@ function AdminPanel({ session, onClose, onSignIn, onSave }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [form, setForm] = useState({ name: '', category: 'Home', price: '', description: '', image_url: '' })
+  const [imageFile, setImageFile] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const isAdmin = session?.user?.app_metadata?.is_admin === true
@@ -215,12 +226,12 @@ function AdminPanel({ session, onClose, onSignIn, onSave }) {
   }
   async function submitProduct(e) {
     e.preventDefault(); setBusy(true); setError('')
-    try { await onSave(form) } catch (err) { setError(err.message || 'Unable to save product') }
+    try { await onSave(form, imageFile) } catch (err) { setError(err.message || 'Unable to save product') }
     finally { setBusy(false) }
   }
   return <div className="overlay admin-overlay" onMouseDown={e => e.target === e.currentTarget && onClose()}><section className="admin-panel">
     <div className="drawer-head"><div><p className="eyebrow">ESSENCE BACK OFFICE</p><h2>Store admin</h2></div><button className="icon-button" onClick={onClose} aria-label="Close admin"><Icon name="close"/></button></div>
-    {!isSupabaseConfigured ? <div className="admin-message"><h3>Store management is almost ready.</h3><p>Connect a Supabase project and add its public URL and publishable key to the deployment settings to enable secure product management.</p></div> : !session ? <form className="admin-form" onSubmit={submitLogin}><p>Sign in with your authorised store account.</p><label>Email<input type="email" required value={email} onChange={e => setEmail(e.target.value)}/></label><label>Password<input type="password" required value={password} onChange={e => setPassword(e.target.value)}/></label><button className="button button-dark full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button></form> : !isAdmin ? <div className="admin-message"><h3>Access not authorised.</h3><p>This account is signed in but does not have the ESSENCE administrator role. Ask the project owner to grant the admin role securely in Supabase.</p><button className="text-link" onClick={() => supabase.auth.signOut()}>Sign out</button></div> : <form className="admin-form" onSubmit={submitProduct}><p>Add a new piece to the live collection.</p><label>Product name<input required value={form.name} onChange={e => setForm({...form, name: e.target.value})}/></label><div className="form-row"><label>Category<input required value={form.category} onChange={e => setForm({...form, category: e.target.value})}/></label><label>Price (₦)<input required type="number" min="1" value={form.price} onChange={e => setForm({...form, price: e.target.value})}/></label></div><label>Description<textarea rows="3" value={form.description} onChange={e => setForm({...form, description: e.target.value})}/></label><label>Image URL<input type="url" required value={form.image_url} onChange={e => setForm({...form, image_url: e.target.value})}/></label>{error && <p className="form-error">{error}</p>}<button className="button button-dark full" disabled={busy}>{busy ? 'Publishing…' : 'Publish product'}</button></form>}
+    {!isSupabaseConfigured ? <div className="admin-message"><h3>Store management is almost ready.</h3><p>Connect a Supabase project and add its public URL and publishable key to the deployment settings to enable secure product management.</p></div> : !session ? <form className="admin-form" onSubmit={submitLogin}><p>Sign in with your authorised store account.</p><label>Email<input type="email" required value={email} onChange={e => setEmail(e.target.value)}/></label><label>Password<input type="password" required value={password} onChange={e => setPassword(e.target.value)}/></label><button className="button button-dark full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button></form> : !isAdmin ? <div className="admin-message"><h3>Access not authorised.</h3><p>This account is signed in but does not have the ESSENCE administrator role. Ask the project owner to grant the admin role securely in Supabase.</p><button className="text-link" onClick={() => supabase.auth.signOut()}>Sign out</button></div> : <form className="admin-form" onSubmit={submitProduct}><p>Add a new piece to the live collection.</p><label>Product name<input required value={form.name} onChange={e => setForm({...form, name: e.target.value})}/></label><div className="form-row"><label>Category<input required value={form.category} onChange={e => setForm({...form, category: e.target.value})}/></label><label>Price (₦)<input required type="number" min="1" value={form.price} onChange={e => setForm({...form, price: e.target.value})}/></label></div><label>Description<textarea rows="3" value={form.description} onChange={e => setForm({...form, description: e.target.value})}/></label><label>Product image<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e => setImageFile(e.target.files?.[0] || null)}/><small>JPG, PNG or WebP · Maximum 5 MB</small></label><label>Or use an image URL<input type="url" value={form.image_url} onChange={e => setForm({...form, image_url: e.target.value})} placeholder="https://..."/></label>{error && <p className="form-error">{error}</p>}<button className="button button-dark full" disabled={busy}>{busy ? 'Publishing…' : 'Publish product'}</button></form>}
     {error && !session && <p className="form-error">{error}</p>}
   </section></div>
 }
